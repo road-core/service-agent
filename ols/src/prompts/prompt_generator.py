@@ -90,6 +90,7 @@ class GeneratePrompt:
             prompt_message.append(MessagesPlaceholder("chat_history"))
 
         prompt_message.append(HumanMessagePromptTemplate.from_template("{query}"))
+        prompt_message.append(MessagesPlaceholder(variable_name="agent_scratchpad"))
         return ChatPromptTemplate.from_messages(prompt_message), llm_input_values
 
     def _generate_prompt_granite(self) -> tuple[PromptTemplate, dict]:
@@ -111,6 +112,7 @@ class GeneratePrompt:
             prompt_message = prompt_message + "\n{chat_history}"
 
         prompt_message = prompt_message + "\n<|user|>\n{query}\n<|assistant|>\n"
+        # prompt_message = prompt_message + "\n{agent_scratchpad}"
         return PromptTemplate.from_template(prompt_message), llm_input_values
 
     def generate_prompt(

@@ -3,7 +3,9 @@
 import logging
 from typing import Any, Optional
 
+from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.chains import LLMChain
+from langchain_core.messages import HumanMessage
 from llama_index.core import VectorStoreIndex
 
 from ols import config
@@ -14,6 +16,7 @@ from ols.constants import RAG_CONTENT_LIMIT, GenericLLMParameters
 from ols.src.prompts.prompt_generator import GeneratePrompt
 from ols.src.prompts.prompts import QUERY_SYSTEM_INSTRUCTION
 from ols.src.query_helpers.query_helper import QueryHelper
+from ols.src.tools.func_def import tools
 from ols.utils.token_handler import TokenHandler
 
 logger = logging.getLogger(__name__)
@@ -90,6 +93,16 @@ class DocsSummarizer(QueryHelper):
         temp_prompt, temp_prompt_input = GeneratePrompt(
             query, ["sample"], ["ai: sample"], self._system_prompt
         ).generate_prompt(self.model)
+
+        temp_msg_placeholder = None
+        if self.model and ("granite" in self.model):
+            # temp_msg_placeholder = ""
+            pass
+        else:
+            temp_msg_placeholder = [HumanMessage(content="")]
+
+        if temp_msg_placeholder is not None:
+            temp_prompt_input["agent_scratchpad"] = temp_msg_placeholder
         available_tokens = token_handler.calculate_and_check_available_tokens(
             temp_prompt.format(**temp_prompt_input),
             model_config.context_window_size,
@@ -119,6 +132,8 @@ class DocsSummarizer(QueryHelper):
         # Tokens-check: We trigger the computation of the token count
         # without care about the return value. This is to ensure that
         # the query is within the token limit.
+        if temp_msg_placeholder is not None:
+            llm_input_values["agent_scratchpad"] = temp_msg_placeholder
         token_handler.calculate_and_check_available_tokens(
             final_prompt.format(**llm_input_values),
             model_config.context_window_size,
@@ -131,18 +146,28 @@ class DocsSummarizer(QueryHelper):
             verbose=verbose,
         )
 
+        if self.model and ("granite" in self.model):
+            model_engine = chat_engine
+        else:
+            agent = create_tool_calling_agent(bare_llm, tools, final_prompt)
+            model_engine = AgentExecutor(agent=agent, tools=tools, verbose=True)
+
         with TokenMetricUpdater(
             llm=bare_llm,
             provider=provider_config.type,
             model=self.model,
         ) as token_counter:
-            summary = chat_engine.invoke(
+            summary = model_engine.invoke(
+                verbose=True,
                 input=llm_input_values,
                 config={"callbacks": [token_counter]},
             )
 
         # retrieve text response returned from LLM, strip whitespace characters from beginning/end
-        response = summary["text"].strip()
+        if "text" in summary:
+            response = summary["text"].strip()
+        else:
+            response = summary["output"].strip()
 
         if len(rag_context) == 0:
             logger.debug("Using llm to answer the query without reference content")
