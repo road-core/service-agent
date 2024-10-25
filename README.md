@@ -1,5 +1,7 @@
 # About The Project
 
+**This is a mirror of [service repo](https://github.com/road-core/service.git). This repo will target to implement agentic flow. Currently in experimental stage.**
+
 Road Core Service (RCS) is an AI powered assistant that runs on OpenShift
 and provides answers to product questions using backend LLM services. Currently
 [OpenAI](https://openai.com/), [Azure
